@@ -1,35 +1,29 @@
-import { put, list, head } from "@vercel/blob";
 import { PaperIndex } from "./types";
+import fs from "fs";
+import path from "path";
 
-const INDEX_BLOB_PATH = "igcse-hub/papers-index.json";
+const INDEX_FILE = path.join(process.cwd(), "data", "papers.json");
 
 export async function loadIndex(): Promise<PaperIndex> {
   try {
-    const { blobs } = await list({ prefix: INDEX_BLOB_PATH });
-    if (blobs.length === 0) return { papers: [], lastUpdated: new Date().toISOString() };
-    const latest = blobs.sort((a, b) => new Date(b.uploadedAt).getTime() - new Date(a.uploadedAt).getTime())[0];
-    const res = await fetch(latest.url + `?t=${Date.now()}`);
-    return await res.json();
-  } catch {
-    return { papers: [], lastUpdated: new Date().toISOString() };
-  }
+    if (fs.existsSync(INDEX_FILE)) {
+      return JSON.parse(fs.readFileSync(INDEX_FILE, "utf8"));
+    }
+  } catch {}
+  return { papers: [], lastUpdated: new Date().toISOString() };
 }
 
 export async function saveIndex(index: PaperIndex): Promise<void> {
   index.lastUpdated = new Date().toISOString();
-  await put(INDEX_BLOB_PATH, JSON.stringify(index, null, 2), {
-    access: "public",
-    contentType: "application/json",
-    allowOverwrite: true,
-  });
+  fs.mkdirSync(path.dirname(INDEX_FILE), { recursive: true });
+  fs.writeFileSync(INDEX_FILE, JSON.stringify(index, null, 2));
 }
 
-export async function fetchPdfBytes(blobUrl: string): Promise<Uint8Array | null> {
+export async function fetchPdfBytes(url: string): Promise<Uint8Array | null> {
   try {
-    const res = await fetch(blobUrl);
+    const res = await fetch(url);
     if (!res.ok) return null;
-    const buf = await res.arrayBuffer();
-    return new Uint8Array(buf);
+    return new Uint8Array(await res.arrayBuffer());
   } catch {
     return null;
   }

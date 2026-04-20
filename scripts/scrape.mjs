@@ -13,12 +13,10 @@ import fs from "fs";
 import path from "path";
 import https from "https";
 import { fileURLToPath } from "url";
-import { put, list } from "@vercel/blob";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.join(__dirname, "..");
 const LOCAL_INDEX = path.join(ROOT, "data", "papers.json");
-const INDEX_BLOB_PATH = "igcse-hub/papers-index.json";
 
 // Load .env.local
 const envFile = path.join(ROOT, ".env.local");
@@ -53,13 +51,7 @@ async function saveIndex(index) {
   index.lastUpdated = new Date().toISOString();
   fs.mkdirSync(path.dirname(LOCAL_INDEX), { recursive: true });
   fs.writeFileSync(LOCAL_INDEX, JSON.stringify(index, null, 2));
-  // Upload index to Blob so the website can read it
-  if (process.env.BLOB_READ_WRITE_TOKEN) {
-    await put(INDEX_BLOB_PATH, JSON.stringify(index, null, 2), {
-      access: "public", contentType: "application/json",
-      allowOverwrite: true, token: process.env.BLOB_READ_WRITE_TOKEN,
-    });
-  }
+  console.log(`\nIndex saved (${index.papers.length} papers).`);
 }
 
 // ---- HTTP HEAD check (fast — no download) ----
