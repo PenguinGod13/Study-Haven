@@ -1,22 +1,26 @@
 #!/usr/bin/env node
 /**
- * Scraper for IGCSE past papers — uploads to Vercel Blob
- * Requires BLOB_READ_WRITE_TOKEN in .env.local
+ * IGCSE past paper indexer — finds papers on public sources, stores URLs in index.
+ * PDFs are NOT uploaded to Blob — they're served directly from source sites.
+ * Only the index JSON is stored in Vercel Blob.
  *
  * Run: node scripts/scrape.mjs <biology|physics|chemistry> [startYear] [endYear]
+ *      node scripts/scrape.mjs clean [subject]
+ *      node scripts/scrape.mjs autotag [subject]
  */
 
 import fs from "fs";
 import path from "path";
 import https from "https";
-import http from "http";
 import { fileURLToPath } from "url";
 import { put, list } from "@vercel/blob";
 
-// Load .env.local
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.join(__dirname, "..");
 const LOCAL_INDEX = path.join(ROOT, "data", "papers.json");
+const INDEX_BLOB_PATH = "igcse-hub/papers-index.json";
+
+// Load .env.local
 const envFile = path.join(ROOT, ".env.local");
 if (fs.existsSync(envFile)) {
   for (const line of fs.readFileSync(envFile, "utf8").split("\n")) {
@@ -32,213 +36,143 @@ const SESSIONS = [
   { label: "Feb/Mar", code: "m" },
 ];
 const PAPER_VARIANTS = ["21", "22", "23", "41", "42", "43", "61", "62", "63"];
-const INDEX_BLOB_PATH = "igcse-hub/papers-index.json";
 
-// Browser-like headers to avoid blocks
 const HEADERS = {
   "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
   "Accept": "application/pdf,*/*",
-  "Accept-Language": "en-US,en;q=0.9",
-  "Referer": "https://www.papacambridge.com/",
 };
 
-async function loadIndex() {
-  // Always read from local file — fast and never stale
-  if (fs.existsSync(LOCAL_INDEX)) {
-    return JSON.parse(fs.readFileSync(LOCAL_INDEX, "utf8"));
-  }
+// ---- Index (local file + Blob for website) ----
+
+function loadIndex() {
+  if (fs.existsSync(LOCAL_INDEX)) return JSON.parse(fs.readFileSync(LOCAL_INDEX, "utf8"));
   return { papers: [], lastUpdated: new Date().toISOString() };
 }
 
 async function saveIndex(index) {
   index.lastUpdated = new Date().toISOString();
-  // Save locally
   fs.mkdirSync(path.dirname(LOCAL_INDEX), { recursive: true });
   fs.writeFileSync(LOCAL_INDEX, JSON.stringify(index, null, 2));
-  // Upload to Blob so the website can read it
-  await put(INDEX_BLOB_PATH, JSON.stringify(index, null, 2), {
-    access: "public", contentType: "application/json",
-    allowOverwrite: true, token: process.env.BLOB_READ_WRITE_TOKEN,
-  });
+  // Upload index to Blob so the website can read it
+  if (process.env.BLOB_READ_WRITE_TOKEN) {
+    await put(INDEX_BLOB_PATH, JSON.stringify(index, null, 2), {
+      access: "public", contentType: "application/json",
+      allowOverwrite: true, token: process.env.BLOB_READ_WRITE_TOKEN,
+    });
+  }
 }
 
-function fetchUrl(url) {
+// ---- HTTP HEAD check (fast — no download) ----
+
+function checkUrl(url) {
   return new Promise((resolve) => {
-    const proto = url.startsWith("https") ? https : http;
-    const chunks = [];
-    const options = { timeout: 20000, headers: HEADERS };
-    const req = proto.get(url, options, (res) => {
+    const req = https.request(url, { method: "HEAD", timeout: 8000, headers: HEADERS }, (res) => {
       if (res.statusCode === 301 || res.statusCode === 302) {
-        resolve(fetchUrl(res.headers.location));
+        resolve(checkUrl(res.headers.location));
         return;
       }
-      if (res.statusCode !== 200) { resolve(null); return; }
-      res.on("data", (c) => chunks.push(c));
-      res.on("end", () => {
-        const buf = Buffer.concat(chunks);
-        // Validate it's actually a PDF (%PDF magic bytes)
-        if (buf.length < 4 || buf[0] !== 0x25 || buf[1] !== 0x50 || buf[2] !== 0x44 || buf[3] !== 0x46) {
-          resolve(null); // Got HTML/error page, not a PDF
-          return;
-        }
-        resolve(buf);
-      });
+      const ok = res.statusCode === 200 && (res.headers["content-type"] || "").includes("pdf");
+      resolve(ok ? url : null);
     });
     req.on("error", () => resolve(null));
     req.on("timeout", () => { req.destroy(); resolve(null); });
+    req.end();
   });
 }
 
-// Try multiple sources for a given filename
-async function fetchPaper(filename, subject, subjectCode) {
-  const subjectSlug = { biology: "biology", physics: "physics", chemistry: "chemistry" }[subject];
+function findPaperUrl(filename, subject, subjectCode) {
   const sources = [
-    // dynamicpapers.com — fixed upload path works for all papers
     `https://dynamicpapers.com/wp-content/uploads/2015/09/${filename}`,
-    // bestexamhelp.com
-    `https://bestexamhelp.com/exam/cambridge-igcse/${subjectSlug}-${subjectCode}/${filename.split("_")[1].replace(/[smw](\d{2})/, "20$1")}/${filename}`,
+    `https://bestexamhelp.com/exam/cambridge-igcse/${subject}-${subjectCode}/${filename.slice(5,7) === "s" || filename.slice(5,7) === "w" || filename.slice(5,7) === "m" ? "20" + filename.slice(6,8) : "20" + filename.slice(5,7)}/${filename}`,
   ];
-  for (const url of sources) {
-    const buf = await fetchUrl(url);
-    if (buf) return { buf, url };
-  }
-  return null;
+  return Promise.any(sources.map(url => checkUrl(url).then(r => r ?? Promise.reject()))).catch(() => null);
 }
 
-// Run tasks with max N concurrent promises
+// ---- Concurrency pool ----
+
 async function pool(tasks, concurrency) {
-  const results = [];
   let i = 0;
-  async function worker() {
-    while (i < tasks.length) {
-      const idx = i++;
-      results[idx] = await tasks[idx]();
-    }
-  }
+  async function worker() { while (i < tasks.length) { const idx = i++; await tasks[idx](); } }
   await Promise.all(Array.from({ length: concurrency }, worker));
-  return results;
 }
+
+// ---- Commands ----
 
 async function clean(subject) {
-  if (!process.env.BLOB_READ_WRITE_TOKEN) {
-    console.error("BLOB_READ_WRITE_TOKEN not set"); process.exit(1);
-  }
   console.log(`Clearing index for ${subject || "all subjects"}...`);
-  const index = await loadIndex();
+  const index = loadIndex();
   index.papers = subject ? index.papers.filter((p) => p.subject !== subject) : [];
   await saveIndex(index);
   console.log("Done. Index cleared.");
 }
 
 async function scrapeSubject(subject, startYear, endYear) {
-  if (!process.env.BLOB_READ_WRITE_TOKEN) {
-    console.error("BLOB_READ_WRITE_TOKEN not set. Add it to .env.local"); process.exit(1);
-  }
   const subjectCode = SUBJECT_CODES[subject];
-  const index = await loadIndex();
-  let downloaded = 0, skipped = 0, failed = 0;
+  const index = loadIndex();
+  let found = 0, skipped = 0, failed = 0, done = 0;
 
-  // Build all tasks upfront
   const tasks = [];
-  for (let year = startYear; year <= endYear; year++) {
-    for (const session of SESSIONS) {
-      for (const variant of PAPER_VARIANTS) {
+  for (let year = startYear; year <= endYear; year++)
+    for (const session of SESSIONS)
+      for (const variant of PAPER_VARIANTS)
         for (const type of ["qp", "ms"]) {
           const shortYear = String(year).slice(2);
           const filename = `${subjectCode}_${session.code}${shortYear}_${type}_${variant}.pdf`;
-          const blobPath = `igcse-hub/papers/${subject}/${year}/${session.label.replace("/", "-")}/${filename}`;
           const paperId = `${subject}-${year}-${session.code}-${variant}-${type}`;
-          tasks.push({ year, session, variant, type, filename, blobPath, paperId });
+          tasks.push({ year, session, variant, type, filename, paperId });
         }
-      }
-    }
-  }
 
   const total = tasks.length;
-  let done = 0;
 
   await pool(tasks.map((task) => async () => {
-    const { year, session, variant, type, filename, blobPath, paperId } = task;
-    const existing = index.papers.find((p) => p.id === paperId);
-    if (existing?.downloaded) { skipped++; done++; return; }
+    const { year, session, variant, type, filename, paperId } = task;
+    if (index.papers.find((p) => p.id === paperId)?.downloaded) { skipped++; done++; return; }
 
-    const result = await fetchPaper(filename, subject, subjectCode);
+    const url = await findPaperUrl(filename, subject, subjectCode);
     done++;
-    process.stdout.write(`\r[${done}/${total}] ✓ ${downloaded} downloaded, ✗ ${failed} failed    `);
+    process.stdout.write(`\r[${done}/${total}] ✓ ${found} found  ✗ ${failed} not found    `);
 
-    if (!result) { failed++; return; }
-
-    try {
-      const blob = await put(blobPath, result.buf, {
-        access: "public", contentType: "application/pdf",
-        allowOverwrite: true, token: process.env.BLOB_READ_WRITE_TOKEN,
-      });
-      if (existing) {
-        existing.blobUrl = blob.url; existing.downloaded = true;
-      } else {
-        index.papers.push({
-          id: paperId, subject, year, session: session.label,
-          paper: variant, variant, type, filename,
-          localPath: "", blobUrl: blob.url, url: result.url,
-          topicIds: [], downloaded: true,
-        });
-      }
-      downloaded++;
-    } catch { failed++; }
-  }), 10); // 10 concurrent downloads
+    if (!url) { failed++; return; }
+    index.papers.push({
+      id: paperId, subject, year, session: session.label,
+      paper: variant, variant, type, filename,
+      localPath: "", blobUrl: url, url,
+      topicIds: [], downloaded: true,
+    });
+    found++;
+  }), 15);
 
   await saveIndex(index);
-  console.log(`\n\nDone ${subject}: ${downloaded} downloaded, ${skipped} skipped, ${failed} not found`);
+  console.log(`\n\nDone ${subject}: ${found} found, ${skipped} skipped, ${failed} not found`);
 }
 
-// ---- auto-tag ----
 const TOPIC_MAP = {
-  biology: {
-    "2": ["bio-1","bio-2","bio-3","bio-4","bio-5","bio-6","bio-7","bio-8","bio-9","bio-10","bio-11","bio-12"],
-    "4": ["bio-13","bio-14","bio-15","bio-16","bio-17","bio-18","bio-19"],
-    "6": ["bio-5","bio-6","bio-11"],
-  },
-  physics: {
-    "2": ["phy-1","phy-2","phy-3","phy-4","phy-5","phy-6","phy-7","phy-8","phy-9"],
-    "4": ["phy-10","phy-11","phy-12","phy-13","phy-14","phy-15","phy-16","phy-17","phy-18","phy-19"],
-    "6": ["phy-1","phy-6","phy-9"],
-  },
-  chemistry: {
-    "2": ["chem-1","chem-2","chem-3","chem-4","chem-5","chem-6","chem-7","chem-8"],
-    "4": ["chem-9","chem-10","chem-11","chem-12","chem-13","chem-14"],
-    "6": ["chem-5","chem-8"],
-  },
+  biology:   { "2": ["bio-1","bio-2","bio-3","bio-4","bio-5","bio-6","bio-7","bio-8","bio-9","bio-10","bio-11","bio-12"], "4": ["bio-13","bio-14","bio-15","bio-16","bio-17","bio-18","bio-19"], "6": ["bio-5","bio-6","bio-11"] },
+  physics:   { "2": ["phy-1","phy-2","phy-3","phy-4","phy-5","phy-6","phy-7","phy-8","phy-9"], "4": ["phy-10","phy-11","phy-12","phy-13","phy-14","phy-15","phy-16","phy-17","phy-18","phy-19"], "6": ["phy-1","phy-6","phy-9"] },
+  chemistry: { "2": ["chem-1","chem-2","chem-3","chem-4","chem-5","chem-6","chem-7","chem-8"], "4": ["chem-9","chem-10","chem-11","chem-12","chem-13","chem-14"], "6": ["chem-5","chem-8"] },
 };
 
 async function autotag(subjectArg) {
-  const index = await loadIndex();
+  const index = loadIndex();
   let tagged = 0;
-  const subjects = subjectArg ? [subjectArg] : ["biology", "physics", "chemistry"];
-  for (const subject of subjects) {
+  for (const subject of (subjectArg ? [subjectArg] : ["biology","physics","chemistry"]))
     for (const paper of index.papers) {
       if (paper.subject !== subject) continue;
-      const map = TOPIC_MAP[subject];
-      const paperNum = paper.paper.charAt(0);
-      if (map?.[paperNum]) { paper.topicIds = map[paperNum]; tagged++; }
+      const topics = TOPIC_MAP[subject]?.[paper.paper.charAt(0)];
+      if (topics) { paper.topicIds = topics; tagged++; }
     }
-  }
   await saveIndex(index);
   console.log(`Auto-tagged ${tagged} papers.`);
 }
 
 // CLI
 const [,, cmd, arg1, arg2] = process.argv;
-if (cmd === "autotag") {
-  autotag(arg1).catch(console.error);
-} else if (cmd === "clean") {
-  clean(arg1).catch(console.error); // arg1 optional: specific subject
-} else if (SUBJECT_CODES[cmd]) {
-  const startYear = parseInt(arg1 || "2019");
-  const endYear = parseInt(arg2 || "2025");
-  scrapeSubject(cmd, startYear, endYear).catch(console.error);
-} else {
+if (cmd === "autotag") autotag(arg1).catch(console.error);
+else if (cmd === "clean") clean(arg1).catch(console.error);
+else if (SUBJECT_CODES[cmd]) scrapeSubject(cmd, parseInt(arg1||"2019"), parseInt(arg2||"2025")).catch(console.error);
+else {
   console.log("Usage:");
   console.log("  node scripts/scrape.mjs <biology|physics|chemistry> [startYear] [endYear]");
-  console.log("  node scripts/scrape.mjs clean [subject]   — delete blobs and reset index");
+  console.log("  node scripts/scrape.mjs clean [subject]");
   console.log("  node scripts/scrape.mjs autotag [subject]");
 }
