@@ -10,7 +10,7 @@ const SUBJECT_CODES: Record<string, string> = {
   chemistry: "0620",
 };
 
-const PAPER_VARIANTS = ["11", "12", "13", "21", "22", "23", "41", "42", "43", "51", "52", "53", "61", "62", "63"];
+const PAPER_VARIANTS = ["21", "22", "23", "41", "42", "43", "61", "62", "63"];
 
 const SESSION_CODES: Record<string, string> = {
   "May/June": "s",

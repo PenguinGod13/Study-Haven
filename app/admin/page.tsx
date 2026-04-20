@@ -5,7 +5,7 @@ import { SUBJECTS, Subject } from "@/lib/topics";
 import { Paper } from "@/lib/types";
 
 const SESSIONS = ["May/June", "Oct/Nov", "Feb/Mar"];
-const YEARS = Array.from({ length: 10 }, (_, i) => 2024 - i);
+const YEARS = Array.from({ length: 11 }, (_, i) => 2025 - i);
 
 interface ScrapeResult { downloaded: number; skipped: number; failed: number }
 

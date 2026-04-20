@@ -30,7 +30,7 @@ const SESSIONS = [
   { label: "Oct/Nov", code: "w" },
   { label: "Feb/Mar", code: "m" },
 ];
-const PAPER_VARIANTS = ["11", "12", "13", "21", "22", "23", "41", "42", "43", "51", "52", "53", "61", "62", "63"];
+const PAPER_VARIANTS = ["21", "22", "23", "41", "42", "43", "61", "62", "63"];
 const INDEX_BLOB_PATH = "igcse-hub/papers-index.json";
 
 async function loadIndex() {
@@ -198,7 +198,7 @@ if (cmd === "autotag") {
   autotag(arg1).catch(console.error);
 } else if (SUBJECT_CODES[cmd]) {
   const startYear = parseInt(arg1 || "2019");
-  const endYear = parseInt(arg2 || "2024");
+  const endYear = parseInt(arg2 || "2025");
   scrapeSubject(cmd, startYear, endYear).catch(console.error);
 } else {
   console.log("Usage:");
