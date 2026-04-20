@@ -11,7 +11,7 @@ import path from "path";
 import https from "https";
 import http from "http";
 import { fileURLToPath } from "url";
-import { put, list, del } from "@vercel/blob";
+import { put, list } from "@vercel/blob";
 
 // Load .env.local
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -136,25 +136,11 @@ async function clean(subject) {
   if (!process.env.BLOB_READ_WRITE_TOKEN) {
     console.error("BLOB_READ_WRITE_TOKEN not set"); process.exit(1);
   }
-  console.log(`Deleting all blobs for ${subject || "all subjects"}...`);
-  const prefix = subject ? `igcse-hub/papers/${subject}/` : "igcse-hub/papers/";
-  let deleted = 0;
-  let cursor;
-  do {
-    const res = await list({ prefix, token: process.env.BLOB_READ_WRITE_TOKEN, cursor, limit: 1000 });
-    if (res.blobs.length > 0) {
-      await del(res.blobs.map((b) => b.url), { token: process.env.BLOB_READ_WRITE_TOKEN });
-      deleted += res.blobs.length;
-      process.stdout.write(`\rDeleted ${deleted} blobs...`);
-    }
-    cursor = res.cursor;
-  } while (cursor);
-
-  // Clear index for subject
+  console.log(`Clearing index for ${subject || "all subjects"}...`);
   const index = await loadIndex();
   index.papers = subject ? index.papers.filter((p) => p.subject !== subject) : [];
   await saveIndex(index);
-  console.log(`\nDone. Deleted ${deleted} blobs and cleared index.`);
+  console.log("Done. Index cleared.");
 }
 
 async function scrapeSubject(subject, startYear, endYear) {
