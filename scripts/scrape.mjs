@@ -16,6 +16,7 @@ import { put, list } from "@vercel/blob";
 // Load .env.local
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.join(__dirname, "..");
+const LOCAL_INDEX = path.join(ROOT, "data", "papers.json");
 const envFile = path.join(ROOT, ".env.local");
 if (fs.existsSync(envFile)) {
   for (const line of fs.readFileSync(envFile, "utf8").split("\n")) {
@@ -42,25 +43,22 @@ const HEADERS = {
 };
 
 async function loadIndex() {
-  try {
-    const { blobs } = await list({ prefix: INDEX_BLOB_PATH, token: process.env.BLOB_READ_WRITE_TOKEN });
-    if (blobs.length === 0) return { papers: [], lastUpdated: new Date().toISOString() };
-    // Always use the most recently uploaded version
-    const latest = blobs.sort((a, b) => new Date(b.uploadedAt) - new Date(a.uploadedAt))[0];
-    const res = await fetch(latest.url + `?t=${Date.now()}`); // bust cache
-    return await res.json();
-  } catch {
-    return { papers: [], lastUpdated: new Date().toISOString() };
+  // Always read from local file — fast and never stale
+  if (fs.existsSync(LOCAL_INDEX)) {
+    return JSON.parse(fs.readFileSync(LOCAL_INDEX, "utf8"));
   }
+  return { papers: [], lastUpdated: new Date().toISOString() };
 }
 
 async function saveIndex(index) {
   index.lastUpdated = new Date().toISOString();
+  // Save locally
+  fs.mkdirSync(path.dirname(LOCAL_INDEX), { recursive: true });
+  fs.writeFileSync(LOCAL_INDEX, JSON.stringify(index, null, 2));
+  // Upload to Blob so the website can read it
   await put(INDEX_BLOB_PATH, JSON.stringify(index, null, 2), {
-    access: "public",
-    contentType: "application/json",
-    allowOverwrite: true,
-    token: process.env.BLOB_READ_WRITE_TOKEN,
+    access: "public", contentType: "application/json",
+    allowOverwrite: true, token: process.env.BLOB_READ_WRITE_TOKEN,
   });
 }
 
