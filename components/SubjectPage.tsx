@@ -166,16 +166,6 @@ export default function SubjectPage({ subject }: Props) {
           )}
         </div>
 
-        {/* Paper viewer overlay */}
-        {viewPaper && (
-          <div className="fixed inset-0 z-50 bg-black/80 flex flex-col">
-            <div className="flex items-center justify-between p-3 bg-gray-900 border-b border-gray-800">
-              <span className="text-sm font-medium">{viewPaper.filename}</span>
-              <button onClick={() => setViewPaper(null)} className="text-gray-400 hover:text-white px-3 py-1 rounded">✕ Close</button>
-            </div>
-            <iframe src={viewPaper.blobUrl || viewPaper.localPath} className="flex-1 w-full" title={viewPaper.filename} />
-          </div>
-        )}
 
         {/* Papers list */}
         {loading ? (
@@ -210,12 +200,14 @@ export default function SubjectPage({ subject }: Props) {
                   <span className="text-xs text-gray-600">{paper.topicIds.length} topics</span>
                 )}
                 <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                  <button
-                    onClick={() => setViewPaper(paper)}
+                  <a
+                    href={paper.blobUrl || paper.localPath}
+                    target="_blank"
+                    rel="noreferrer"
                     className="text-xs px-2.5 py-1 rounded bg-gray-700 hover:bg-gray-600 transition-colors"
                   >
                     View
-                  </button>
+                  </a>
                   <a
                     href={paper.blobUrl || paper.localPath}
                     download
