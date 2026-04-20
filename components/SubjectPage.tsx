@@ -9,9 +9,9 @@ interface Props {
 }
 
 const COLOR = {
-  biology: { badge: "bg-green-500/20 text-green-300 border-green-500/30", active: "bg-green-500/20 border-green-400 text-green-200", dot: "bg-green-400" },
-  physics: { badge: "bg-blue-500/20 text-blue-300 border-blue-500/30", active: "bg-blue-500/20 border-blue-400 text-blue-200", dot: "bg-blue-400" },
-  chemistry: { badge: "bg-purple-500/20 text-purple-300 border-purple-500/30", active: "bg-purple-500/20 border-purple-400 text-purple-200", dot: "bg-purple-400" },
+  biology: { header: "bg-green-900/40 border-green-700", active: "bg-green-800/60 border-green-500 text-white", dot: "bg-green-400", badge: "bg-green-900/60 text-green-300 border-green-700", export: "bg-green-500 hover:bg-green-400" },
+  physics: { header: "bg-blue-900/40 border-blue-700", active: "bg-blue-800/60 border-blue-500 text-white", dot: "bg-blue-400", badge: "bg-blue-900/60 text-blue-300 border-blue-700", export: "bg-blue-500 hover:bg-blue-400" },
+  chemistry: { header: "bg-purple-900/40 border-purple-700", active: "bg-purple-800/60 border-purple-500 text-white", dot: "bg-purple-400", badge: "bg-purple-900/60 text-purple-300 border-purple-700", export: "bg-purple-500 hover:bg-purple-400" },
 };
 
 export default function SubjectPage({ subject }: Props) {
@@ -24,7 +24,6 @@ export default function SubjectPage({ subject }: Props) {
   const [typeFilter, setTypeFilter] = useState<"qp" | "ms" | "all">("qp");
   const [yearFilter, setYearFilter] = useState<string>("all");
   const [sessionFilter, setSessionFilter] = useState<string>("all");
-  const [viewPaper, setViewPaper] = useState<Paper | null>(null);
   const [exportLoading, setExportLoading] = useState(false);
   const [expandedTopic, setExpandedTopic] = useState<string | null>(null);
 
@@ -74,16 +73,16 @@ export default function SubjectPage({ subject }: Props) {
     <div className="flex gap-6 min-h-[calc(100vh-120px)]">
       {/* Sidebar */}
       <aside className="w-64 flex-shrink-0">
-        <div className={`rounded-xl border p-4 ${colors.badge} border-opacity-30 bg-opacity-10 mb-4`}>
+        <div className={`rounded-xl border p-4 mb-4 ${colors.header}`}>
           <h2 className="font-bold text-lg text-white">{subjectData.name}</h2>
-          <p className="text-xs opacity-70">CIE {subjectData.code} · {subjectData.topics.length} topics</p>
+          <p className="text-xs text-gray-300">CIE {subjectData.code} · {subjectData.topics.length} topics</p>
         </div>
 
-        <nav className="space-y-1">
+        <nav className="space-y-0.5">
           <button
             onClick={() => setSelectedTopicId(null)}
-            className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-colors ${
-              !selectedTopicId ? colors.active + " border font-medium" : "hover:bg-gray-800 text-gray-400"
+            className={`w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+              !selectedTopicId ? colors.active + " border" : "text-gray-300 hover:bg-gray-800 hover:text-white"
             }`}
           >
             All Papers
@@ -97,16 +96,16 @@ export default function SubjectPage({ subject }: Props) {
                   setExpandedTopic(expandedTopic === topic.id ? null : topic.id);
                 }}
                 className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-colors flex items-center justify-between ${
-                  selectedTopicId === topic.id ? colors.active + " border font-medium" : "hover:bg-gray-800 text-gray-400"
+                  selectedTopicId === topic.id ? colors.active + " border font-medium" : "text-gray-300 hover:bg-gray-800 hover:text-white"
                 }`}
               >
                 <span className="truncate pr-2">{topic.name}</span>
-                {topic.subtopics && <span className="text-xs opacity-50">{expandedTopic === topic.id ? "▲" : "▼"}</span>}
+                {topic.subtopics && <span className="text-gray-400 text-xs">{expandedTopic === topic.id ? "▲" : "▼"}</span>}
               </button>
               {expandedTopic === topic.id && topic.subtopics && (
-                <div className="ml-4 mt-1 space-y-0.5">
+                <div className="ml-4 mt-0.5 space-y-0.5">
                   {topic.subtopics.map((sub) => (
-                    <div key={sub} className="px-3 py-1 text-xs text-gray-500">{sub}</div>
+                    <div key={sub} className="px-3 py-1 text-xs text-gray-400">{sub}</div>
                   ))}
                 </div>
               )}
@@ -119,16 +118,16 @@ export default function SubjectPage({ subject }: Props) {
       <div className="flex-1 min-w-0">
         {/* Filters */}
         <div className="flex flex-wrap gap-3 mb-6 items-center">
-          <div className="text-sm font-medium text-gray-400">
+          <div className="text-sm font-semibold text-white">
             {selectedTopic ? selectedTopic.name : "All Papers"}
-            {!loading && <span className="ml-2 text-gray-600">({papers.length})</span>}
+            {!loading && <span className="ml-2 font-normal text-gray-400">({papers.length})</span>}
           </div>
           <div className="flex-1" />
 
           <select
             value={typeFilter}
             onChange={(e) => setTypeFilter(e.target.value as "qp" | "ms" | "all")}
-            className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-1.5 text-sm"
+            className="bg-gray-800 border border-gray-600 text-white rounded-lg px-3 py-1.5 text-sm"
           >
             <option value="qp">Question Papers</option>
             <option value="ms">Mark Schemes</option>
@@ -138,7 +137,7 @@ export default function SubjectPage({ subject }: Props) {
           <select
             value={sessionFilter}
             onChange={(e) => setSessionFilter(e.target.value)}
-            className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-1.5 text-sm"
+            className="bg-gray-800 border border-gray-600 text-white rounded-lg px-3 py-1.5 text-sm"
           >
             <option value="all">All Sessions</option>
             <option value="May/June">May/June</option>
@@ -149,7 +148,7 @@ export default function SubjectPage({ subject }: Props) {
           <select
             value={yearFilter}
             onChange={(e) => setYearFilter(e.target.value)}
-            className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-1.5 text-sm"
+            className="bg-gray-800 border border-gray-600 text-white rounded-lg px-3 py-1.5 text-sm"
           >
             <option value="all">All Years</option>
             {years.map((y) => <option key={y} value={y}>{y}</option>)}
@@ -159,24 +158,23 @@ export default function SubjectPage({ subject }: Props) {
             <button
               onClick={handleExport}
               disabled={exportLoading || papers.length === 0}
-              className={`flex items-center gap-2 px-4 py-1.5 rounded-lg text-sm font-medium transition-colors ${colors.dot} text-gray-900 hover:opacity-90 disabled:opacity-40`}
+              className={`flex items-center gap-2 px-4 py-1.5 rounded-lg text-sm font-medium text-white transition-colors ${colors.export} disabled:opacity-40`}
             >
               {exportLoading ? "Generating..." : "⬇ Export Topical PDF"}
             </button>
           )}
         </div>
 
-
         {/* Papers list */}
         {loading ? (
-          <div className="text-gray-500 text-sm py-12 text-center">Loading papers...</div>
+          <div className="text-gray-400 text-sm py-12 text-center">Loading papers...</div>
         ) : papers.length === 0 ? (
-          <div className="text-gray-500 text-sm py-12 text-center">
-            <p className="text-lg mb-2">No papers found</p>
+          <div className="text-gray-400 text-sm py-12 text-center">
+            <p className="text-lg mb-2 text-white">No papers found</p>
             {selectedTopicId ? (
               <p className="text-xs">Papers need to be tagged with this topic. Use the admin panel or run the tagger.</p>
             ) : (
-              <p className="text-xs">Run <code className="bg-gray-800 px-1 rounded">node scripts/scrape.mjs {subject}</code> to download papers.</p>
+              <p className="text-xs">Run <code className="bg-gray-800 px-1 rounded text-gray-200">node scripts/scrape.mjs {subject}</code> to download papers.</p>
             )}
           </div>
         ) : (
@@ -184,27 +182,27 @@ export default function SubjectPage({ subject }: Props) {
             {papers.map((paper) => (
               <div
                 key={paper.id}
-                className="flex items-center gap-4 p-3 rounded-lg bg-gray-900 border border-gray-800 hover:border-gray-600 transition-colors group"
+                className="flex items-center gap-4 p-3 rounded-lg bg-gray-900 border border-gray-700 hover:border-gray-500 transition-colors group"
               >
                 <div className={`w-2 h-2 rounded-full flex-shrink-0 ${paper.type === "qp" ? colors.dot : "bg-yellow-400"}`} />
                 <div className="flex-1 min-w-0">
-                  <div className="text-sm font-medium text-white">
+                  <div className="text-sm font-semibold text-white">
                     {paper.year} {paper.session} — Paper {paper.paper}
                   </div>
-                  <div className="text-xs text-gray-500 truncate">{paper.filename}</div>
+                  <div className="text-xs text-gray-400 truncate">{paper.filename}</div>
                 </div>
-                <span className={`text-xs px-2 py-0.5 rounded border ${paper.type === "qp" ? colors.badge : "bg-yellow-500/20 text-yellow-300 border-yellow-500/30"}`}>
+                <span className={`text-xs px-2 py-0.5 rounded border font-medium ${paper.type === "qp" ? colors.badge : "bg-yellow-900/50 text-yellow-300 border-yellow-700"}`}>
                   {paper.type === "qp" ? "QP" : "MS"}
                 </span>
                 {paper.topicIds.length > 0 && (
-                  <span className="text-xs text-gray-600">{paper.topicIds.length} topics</span>
+                  <span className="text-xs text-gray-500">{paper.topicIds.length} topics</span>
                 )}
                 <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
                   <a
                     href={paper.blobUrl || paper.localPath}
                     target="_blank"
                     rel="noreferrer"
-                    className="text-xs px-2.5 py-1 rounded bg-gray-700 hover:bg-gray-600 transition-colors"
+                    className="text-xs px-2.5 py-1 rounded bg-gray-700 hover:bg-gray-500 text-white transition-colors"
                   >
                     View
                   </a>
@@ -213,7 +211,7 @@ export default function SubjectPage({ subject }: Props) {
                     download
                     target="_blank"
                     rel="noreferrer"
-                    className="text-xs px-2.5 py-1 rounded bg-gray-700 hover:bg-gray-600 transition-colors"
+                    className="text-xs px-2.5 py-1 rounded bg-gray-700 hover:bg-gray-500 text-white transition-colors"
                   >
                     Download
                   </a>
