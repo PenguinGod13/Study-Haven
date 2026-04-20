@@ -45,7 +45,9 @@ async function loadIndex() {
   try {
     const { blobs } = await list({ prefix: INDEX_BLOB_PATH, token: process.env.BLOB_READ_WRITE_TOKEN });
     if (blobs.length === 0) return { papers: [], lastUpdated: new Date().toISOString() };
-    const res = await fetch(blobs[0].url);
+    // Always use the most recently uploaded version
+    const latest = blobs.sort((a, b) => new Date(b.uploadedAt) - new Date(a.uploadedAt))[0];
+    const res = await fetch(latest.url + `?t=${Date.now()}`); // bust cache
     return await res.json();
   } catch {
     return { papers: [], lastUpdated: new Date().toISOString() };

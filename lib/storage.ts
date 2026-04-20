@@ -7,7 +7,8 @@ export async function loadIndex(): Promise<PaperIndex> {
   try {
     const { blobs } = await list({ prefix: INDEX_BLOB_PATH });
     if (blobs.length === 0) return { papers: [], lastUpdated: new Date().toISOString() };
-    const res = await fetch(blobs[0].url);
+    const latest = blobs.sort((a, b) => new Date(b.uploadedAt).getTime() - new Date(a.uploadedAt).getTime())[0];
+    const res = await fetch(latest.url + `?t=${Date.now()}`);
     return await res.json();
   } catch {
     return { papers: [], lastUpdated: new Date().toISOString() };
