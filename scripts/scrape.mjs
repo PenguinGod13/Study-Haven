@@ -90,27 +90,14 @@ function fetchUrl(url) {
 }
 
 // Try multiple sources for a given filename
-async function fetchPaper(filename, subject, subjectCode, year, session) {
-  const subjectNamesGce = {
-    biology: `Biology (${subjectCode})`,
-    physics: `Physics (${subjectCode})`,
-    chemistry: `Chemistry (${subjectCode})`,
-  };
-  const subjectNamesPapa = {
-    biology: `Biology%20(${subjectCode})`,
-    physics: `Physics%20(${subjectCode})`,
-    chemistry: `Chemistry%20(${subjectCode})`,
-  };
-
+async function fetchPaper(filename, subject, subjectCode) {
+  const subjectSlug = { biology: "biology", physics: "physics", chemistry: "chemistry" }[subject];
   const sources = [
-    // GCE Guide
-    `https://papers.gceguide.com/IGCSE/${encodeURIComponent(subjectNamesGce[subject])}/${year}/${filename}`,
-    // Papacambridge
-    `https://pastpapers.papacambridge.com/Cambridge%20International%20Examinations%20(CIE)/IGCSE/${subjectNamesPapa[subject]}/${year}/${filename}`,
-    // Past Papers
-    `https://pastpapers.co/cie/download/?doc=cambridge-igcse-${subject}-${subjectCode}/${year}/${filename}`,
+    // dynamicpapers.com — fixed upload path works for all papers
+    `https://dynamicpapers.com/wp-content/uploads/2015/09/${filename}`,
+    // bestexamhelp.com
+    `https://bestexamhelp.com/exam/cambridge-igcse/${subjectSlug}-${subjectCode}/${filename.split("_")[1].replace(/[smw](\d{2})/, "20$1")}/${filename}`,
   ];
-
   for (const url of sources) {
     const buf = await fetchUrl(url);
     if (buf) return { buf, url };
@@ -175,7 +162,7 @@ async function scrapeSubject(subject, startYear, endYear) {
     const existing = index.papers.find((p) => p.id === paperId);
     if (existing?.downloaded) { skipped++; done++; return; }
 
-    const result = await fetchPaper(filename, subject, subjectCode, year, session);
+    const result = await fetchPaper(filename, subject, subjectCode);
     done++;
     process.stdout.write(`\r[${done}/${total}] ✓ ${downloaded} downloaded, ✗ ${failed} failed    `);
 
