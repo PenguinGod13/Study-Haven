@@ -199,7 +199,7 @@ export default function SubjectPage({ subject }: Props) {
                 )}
                 <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
                   <a
-                    href={paper.blobUrl || paper.localPath}
+                    href={paper.blobUrl || paper.url || paper.localPath}
                     target="_blank"
                     rel="noreferrer"
                     className="text-xs px-2.5 py-1 rounded bg-gray-700 hover:bg-gray-500 text-white transition-colors"
@@ -207,7 +207,7 @@ export default function SubjectPage({ subject }: Props) {
                     View
                   </a>
                   <a
-                    href={paper.blobUrl || paper.localPath}
+                    href={paper.blobUrl || paper.url || paper.localPath}
                     download
                     target="_blank"
                     rel="noreferrer"

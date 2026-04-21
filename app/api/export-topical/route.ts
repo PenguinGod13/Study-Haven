@@ -27,7 +27,7 @@ export async function POST(req: NextRequest) {
 
     let pagesAdded = 0;
     for (const paper of papers.slice(0, 15)) {
-      const pdfUrl = paper.blobUrl || paper.localPath;
+      const pdfUrl = paper.blobUrl || paper.url || paper.localPath;
       if (!pdfUrl) continue;
       const bytes = await fetchPdfBytes(pdfUrl);
       if (!bytes) continue;
